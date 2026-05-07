@@ -122,6 +122,29 @@
   footer{padding:8px 16px;color:var(--muted);font-size:11px;text-align:center;border-top:1px solid var(--line)}
   a{color:var(--info);text-decoration:none}
   a:hover{text-decoration:underline}
+
+  /* Overlay 載入提示 */
+  #overlay{position:fixed;inset:0;background:rgba(7,11,20,.92);
+    display:flex;align-items:center;justify-content:center;z-index:100;
+    backdrop-filter:blur(8px)}
+  #overlay.drag .ov-card{border-color:var(--accent);background:rgba(251,191,36,.08)}
+  .ov-card{background:var(--panel);border:2px dashed var(--line);border-radius:12px;
+    padding:40px 50px;text-align:center;max-width:480px;transition:all .2s}
+  .ov-card .ov-icon{font-size:48px;margin-bottom:10px}
+  .ov-card h2{margin:0 0 8px;color:var(--accent);font-size:18px;letter-spacing:2px}
+  .ov-card p{margin:6px 0}
+  .ov-btn{display:inline-block;background:linear-gradient(135deg,#1d4ed8,#3b82f6);
+    color:#fff;padding:12px 28px;border-radius:6px;cursor:pointer;
+    font-weight:600;letter-spacing:1px;margin-top:14px;
+    transition:transform .15s,box-shadow .15s}
+  .ov-btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(59,130,246,.4)}
+  /* Toast */
+  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+    background:var(--panel);border:1px solid var(--line);border-radius:6px;
+    padding:10px 16px;font-size:13px;z-index:200;display:none;
+    box-shadow:0 4px 14px rgba(0,0,0,.4)}
+  #toast.ok{border-color:var(--ok);color:var(--ok)}
+  #toast.err{border-color:var(--crit);color:var(--crit)}
 </style>
 </head>
 <body>
@@ -268,18 +291,59 @@ async function fetchPrice(ticker){
 }
 
 /* ============ 載入 state ============ */
+function showOverlay(msg, isError=false){
+  let ov = document.getElementById("overlay");
+  if(!ov){
+    ov = document.createElement("div");
+    ov.id = "overlay";
+    ov.innerHTML = `
+      <div class="ov-card">
+        <div class="ov-icon">📂</div>
+        <h2 id="ov-title">尚未載入 state.json</h2>
+        <p id="ov-msg" class="muted"></p>
+        <label class="ov-btn">選擇 state.json 檔案
+          <input type="file" id="ov-file" accept="application/json" style="display:none">
+        </label>
+        <p class="muted" style="margin-top:14px;font-size:12px">或直接將 JSON 檔案拖到視窗任意處</p>
+        <p class="muted" style="font-size:11px;margin-top:18px">⚠ 純前端讀取，檔案不會上傳到伺服器</p>
+      </div>`;
+    document.body.appendChild(ov);
+    document.getElementById("ov-file").addEventListener("change", async e=>{
+      const f = e.target.files[0]; if(!f) return;
+      await tryParseFile(f);
+    });
+  }
+  document.getElementById("ov-title").textContent = isError?"載入失敗":"尚未載入 state.json";
+  document.getElementById("ov-msg").textContent = msg || "";
+  ov.style.display = "flex";
+}
+function hideOverlay(){
+  const ov = document.getElementById("overlay");
+  if(ov) ov.style.display = "none";
+}
+async function tryParseFile(f){
+  try{
+    const txt = await f.text();
+    const j = JSON.parse(txt);
+    if(!j.cash || !j.holdings){
+      throw new Error("JSON 結構不符（缺 cash 或 holdings 欄位）");
+    }
+    state = j;
+    hideOverlay();
+    render();
+  }catch(e){
+    showOverlay("錯誤：" + e.message, true);
+  }
+}
 async function loadState(){
   try{
     const r = await fetch("state.json",{cache:"no-store"});
-    if(!r.ok) throw 0;
+    if(!r.ok) throw new Error("HTTP "+r.status);
     state = await r.json();
+    hideOverlay();
     render();
   }catch(e){
-    document.querySelector(".wrap").innerHTML =
-      `<div class="panel" style="grid-column:1/-1">
-        <h2><span class="bar"></span>未載入 state.json</h2>
-        <p>請點上方「📂 載入 state.json」或將 JSON 拖入視窗。</p>
-      </div>`;
+    showOverlay("（線上版預設不附帶個人 state.json，請上傳本機檔案。）");
   }
 }
 
@@ -605,17 +669,48 @@ function startLoop(){
 
 /* ============ 事件 ============ */
 $("#refresh").addEventListener("click",()=>{ refreshLivePrices(); leftSec=REFRESH_SEC; });
+function toast(msg, kind="ok"){
+  let t = document.getElementById("toast");
+  if(!t){ t = document.createElement("div"); t.id="toast"; document.body.appendChild(t); }
+  t.className = kind; t.textContent = msg; t.style.display="block";
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>{ t.style.display="none"; },2400);
+}
+// 包裝原 tryParseFile：成功時 toast
+const _tryParseFile = tryParseFile;
+tryParseFile = async function(f){
+  await _tryParseFile(f);
+  if(state) toast(`✓ 已載入 ${f.name}（${state.strategy_version||'state'}）`,"ok");
+  else toast("✗ JSON 載入失敗","err");
+};
+
 $("#file").addEventListener("change", async e=>{
   const f = e.target.files[0]; if(!f) return;
-  state = JSON.parse(await f.text());
-  render();
+  await tryParseFile(f);
+  e.target.value = "";  // 允許重複選同檔
+});
+
+// 拖拉
+let dragDepth = 0;
+window.addEventListener("dragenter", e=>{
+  e.preventDefault(); dragDepth++;
+  const ov = document.getElementById("overlay");
+  if(ov) ov.classList.add("drag");
+});
+window.addEventListener("dragleave", e=>{
+  dragDepth--;
+  if(dragDepth<=0){
+    const ov = document.getElementById("overlay");
+    if(ov) ov.classList.remove("drag");
+  }
 });
 window.addEventListener("dragover", e=>e.preventDefault());
 window.addEventListener("drop", async e=>{
-  e.preventDefault();
+  e.preventDefault(); dragDepth=0;
+  const ov = document.getElementById("overlay");
+  if(ov) ov.classList.remove("drag");
   const f = e.dataTransfer.files[0]; if(!f) return;
-  state = JSON.parse(await f.text());
-  render();
+  await tryParseFile(f);
 });
 
 /* ============ 啟動 ============ */
