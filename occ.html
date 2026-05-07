@@ -257,20 +257,22 @@ const fmtMan = n => (n==null||isNaN(n))?"--":(n/10000).toFixed(1)+"萬";
 const cls = v => v>0?"up-c":v<0?"dn-c":"muted";
 const sign = v => v>0?"+":"";
 
-/* ============ CORS proxy + Yahoo ============ */
+/* ============ Yahoo + fallback（含 5s timeout） ============ */
 const PROXIES = [
-  u=>u,
-  u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
-  u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  u=>u,                                                              // 直連（瀏覽器有 CORS，多數可用）
+  u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,  // 備援
 ];
-async function fetchJson(url){
+async function fetchJson(url, timeoutMs=5000){
   let lastErr;
   for(const wrap of PROXIES){
+    const ctl = new AbortController();
+    const t = setTimeout(()=>ctl.abort(), timeoutMs);
     try{
-      const r = await fetch(wrap(url),{cache:"no-store"});
+      const r = await fetch(wrap(url),{cache:"no-store", signal:ctl.signal});
+      clearTimeout(t);
       if(!r.ok) throw new Error("HTTP "+r.status);
       return await r.json();
-    }catch(e){ lastErr = e; }
+    }catch(e){ clearTimeout(t); lastErr = e; }
   }
   throw lastErr;
 }
@@ -329,6 +331,7 @@ async function tryParseFile(f){
       throw new Error("JSON 結構不符（缺 cash 或 holdings 欄位）");
     }
     state = j;
+    livePrices.clear();   // BUG#4.6 — 清掉前一份 state 的快取價
     hideOverlay();
     render();
   }catch(e){
@@ -509,7 +512,11 @@ function renderBatches(){
       <div class="info">
         <div>${b.trigger} <small>· 目標 ${fmtMoney(b.amount_target)}</small></div>
         <div>${distPct!=null?`距離 ${sign(distPct)}${fmt(distPct,1)}%`:''} ${isPartial?`· 已投 ${fmtMoney(b.executed_amount)} / 剩 ${fmtMoney(b.remaining)}`:''}</div>
-        ${distPct!=null && !exec ? `<div class="dist-bar"><div class="now" style="width:${Math.max(0,Math.min(100,100-Math.abs(distPct)*4))}%"></div></div>` : ''}
+        ${distPct!=null && !exec ? `<div class="dist-bar"><div class="now" style="width:${(()=>{
+          // BUG#4.5 — 改用對數縮放：距離 0% → 100%，距離 30%+ → ~10%，可區分中遠
+          const a = Math.abs(distPct);
+          return Math.max(5, 100 - 30*Math.log10(1+a));
+        })()}%"></div></div>` : ''}
       </div>
       <div style="text-align:right;font-size:11px">${status}</div>
     </div>`;
@@ -668,7 +675,11 @@ function startLoop(){
 }
 
 /* ============ 事件 ============ */
-$("#refresh").addEventListener("click",()=>{ refreshLivePrices(); leftSec=REFRESH_SEC; });
+$("#refresh").addEventListener("click",()=>{
+  refreshLivePrices();
+  leftSec = REFRESH_SEC;
+  $("#cd").textContent = leftSec;   // BUG#4.2 立即更新倒數 UI
+});
 function toast(msg, kind="ok"){
   let t = document.getElementById("toast");
   if(!t){ t = document.createElement("div"); t.id="toast"; document.body.appendChild(t); }

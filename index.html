@@ -170,20 +170,22 @@ function log(msg, cls=""){
 }
 
 /* ============ 取得行情 ============ */
-// CORS proxy 鏈：直連失敗時依序嘗試
+// 取行情：直連 Yahoo 為主 + 1 個 fallback，每次 5s timeout
 const PROXIES = [
-  u => u,                                               // 直連
-  u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+  u => u,
   u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
 ];
-async function fetchWithProxy(url){
+async function fetchWithProxy(url, timeoutMs=5000){
   let lastErr;
   for(const wrap of PROXIES){
+    const ctl = new AbortController();
+    const t = setTimeout(()=>ctl.abort(), timeoutMs);
     try{
-      const r = await fetch(wrap(url), {cache:"no-store"});
+      const r = await fetch(wrap(url), {cache:"no-store", signal:ctl.signal});
+      clearTimeout(t);
       if(!r.ok) throw new Error("HTTP "+r.status);
       return await r.json();
-    }catch(e){ lastErr = e; }
+    }catch(e){ clearTimeout(t); lastErr = e; }
   }
   throw lastErr || new Error("所有來源失敗");
 }
