@@ -452,23 +452,29 @@ $("#pause").addEventListener("click", e=>{
   e.target.textContent = paused ? "▶ 繼續" : "⏸ 暫停";
   log(paused?"已暫停自動更新":"恢復自動更新","warn");
 });
-$("#file").addEventListener("change", async e=>{
-  const f = e.target.files[0]; if(!f) return;
+async function handleFile(f){
+  if(!f) return;
   try{
-    const j = JSON.parse(await f.text());
+    let j;
+    try { j = JSON.parse(await f.text()); }
+    catch(pe){ throw new Error("JSON 解析失敗：" + pe.message); }
+    // 格式判斷
+    const isWatchlist = !!(j.watchlist || j.indices || j.fx);
+    const isOCC = !!(j.cash && j.holdings);
+    if(!isWatchlist){
+      if(isOCC) throw new Error("這是『OCC state』格式（含 cash/holdings）。請改開 occ.html 上傳。");
+      throw new Error("無法辨識格式，找不到 watchlist / indices / fx 任一欄位。頂層鍵：" + Object.keys(j).slice(0,8).join(", "));
+    }
     await applyConfig(j);
-  }catch(err){ log("JSON 解析失敗："+err.message,"err"); }
-});
-// 拖拉
+    log(`✓ 已載入 ${f.name}`,"ok");
+  }catch(err){
+    console.error("[index load error]",err);
+    log("✗ "+err.message,"err");
+  }
+}
+$("#file").addEventListener("change", e=>{ handleFile(e.target.files[0]); e.target.value=""; });
 window.addEventListener("dragover", e=>e.preventDefault());
-window.addEventListener("drop", async e=>{
-  e.preventDefault();
-  const f = e.dataTransfer.files[0]; if(!f) return;
-  try{
-    const j = JSON.parse(await f.text());
-    await applyConfig(j);
-  }catch(err){ log("JSON 解析失敗："+err.message,"err"); }
-});
+window.addEventListener("drop", e=>{ e.preventDefault(); handleFile(e.dataTransfer.files[0]); });
 
 /* ============ 啟動 ============ */
 tryLoadDefault();
