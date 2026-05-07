@@ -1,0 +1,24 @@
+{
+  "title": "我的核心持股 · v2.5",
+  "refreshSec": 30,
+  "indices": [
+    { "symbol": "^TWII",  "name": "台灣加權",   "source": "yahoo" },
+    { "symbol": "^DJI",   "name": "道瓊",       "source": "yahoo" },
+    { "symbol": "^IXIC",  "name": "那斯達克",   "source": "yahoo" },
+    { "symbol": "^GSPC",  "name": "S&P 500",    "source": "yahoo" },
+    { "symbol": "^SOX",   "name": "費半",       "source": "yahoo" },
+    { "symbol": "^N225",  "name": "日經",       "source": "yahoo" },
+    { "symbol": "^HSI",   "name": "恆生",       "source": "yahoo" }
+  ],
+  "watchlist": [
+    { "symbol": "2330.TW",  "name": "台積電 (核心)",       "alertUp": 2.0, "alertDown": -2.0 },
+    { "symbol": "0050.TW",  "name": "元大台灣50 (主ETF)",  "alertUp": 1.5, "alertDown": -1.5 },
+    { "symbol": "00830.TW", "name": "國泰費半 (衛星)",      "alertUp": 2.0, "alertDown": -2.0 },
+    { "symbol": "00881.TW", "name": "國泰科技龍頭 (限額)",  "alertUp": 2.0, "alertDown": -2.0 },
+    { "symbol": "0052.TW",  "name": "富邦科技 (停加碼)",    "alertUp": 2.0, "alertDown": -2.0 }
+  ],
+  "fx": [
+    { "symbol": "TWD=X",    "name": "USD/TWD" },
+    { "symbol": "DX-Y.NYB", "name": "美元指數" }
+  ]
+}

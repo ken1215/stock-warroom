@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>OCC 作戰指揮中心 · Operations Command Center</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070b14; --panel:#0f1729; --panel2:#0a1020;
+    --line:#1e2a44; --text:#e5e7eb; --muted:#7a8aa8;
+    --up:#ef4444; --dn:#22c55e;
+    --warn:#f59e0b; --info:#38bdf8; --ok:#22c55e; --crit:#ef4444;
+    --grid:#1e293b; --accent:#fbbf24;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;font-size:13px;}
+  /* HEADER */
+  header{display:flex;align-items:center;gap:14px;padding:10px 16px;
+    background:linear-gradient(90deg,#0a1530,#0f1729);
+    border-bottom:2px solid #1e3a5f;position:sticky;top:0;z-index:10;}
+  header h1{margin:0;font-size:17px;letter-spacing:3px;color:#fbbf24}
+  header .v{color:#7a8aa8;font-size:12px;letter-spacing:1px}
+  header .meta{margin-left:auto;display:flex;gap:14px;align-items:center;color:var(--muted);font-size:12px}
+  header button,header label.btn{
+    background:#1e2a44;color:#cbd5e1;border:1px solid #334155;
+    padding:5px 10px;border-radius:5px;cursor:pointer;font-size:12px}
+  header button:hover{background:#334155}
+  header input[type=file]{display:none}
+  .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;
+    background:#ef4444;box-shadow:0 0 8px #ef4444;animation:p 1.4s infinite}
+  @keyframes p{0%,100%{opacity:.3}50%{opacity:1}}
+
+  /* GRID */
+  .wrap{padding:14px;display:grid;gap:12px;
+    grid-template-columns:1.5fr 1fr;}
+  @media(max-width:1200px){.wrap{grid-template-columns:1fr}}
+  .col{display:grid;gap:12px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}
+  .panel h2{margin:0 0 10px;font-size:13px;color:var(--accent);
+    letter-spacing:2px;display:flex;align-items:center;gap:8px;
+    border-bottom:1px solid var(--line);padding-bottom:6px}
+  .panel h2 .bar{width:3px;height:13px;background:var(--accent)}
+  .panel h2 .sub{margin-left:auto;color:var(--muted);font-size:11px;letter-spacing:0;font-weight:normal}
+
+  /* KPI 條 */
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+  .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:10px}
+  .kpi .lb{color:var(--muted);font-size:11px;letter-spacing:1px}
+  .kpi .vl{font-size:18px;font-weight:700;margin-top:2px}
+  .kpi .sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .kpi.ok .vl{color:var(--ok)}
+  .kpi.warn .vl{color:var(--warn)}
+  .kpi.crit .vl{color:var(--crit)}
+  .up-c{color:var(--up)}.dn-c{color:var(--dn)}.muted{color:var(--muted)}
+
+  /* 進度條 */
+  .pbar{position:relative;height:22px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:4px;overflow:hidden;margin-top:6px}
+  .pbar .fill{position:absolute;left:0;top:0;bottom:0;
+    background:linear-gradient(90deg,#1d4ed8,#3b82f6);transition:width .6s}
+  .pbar .target{position:absolute;top:0;bottom:0;width:2px;background:#fbbf24;box-shadow:0 0 4px #fbbf24}
+  .pbar .lbl{position:absolute;left:8px;top:0;bottom:0;display:flex;align-items:center;
+    color:#fff;font-size:11px;mix-blend-mode:difference;font-weight:600}
+
+  /* 表格 */
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--muted);font-weight:500;background:var(--panel2);font-size:11px;letter-spacing:1px}
+  tr:hover td{background:rgba(59,130,246,.05)}
+  td.live{font-weight:600}
+  td.flash-up{animation:fU 1s}
+  td.flash-dn{animation:fD 1s}
+  @keyframes fU{0%{background:rgba(239,68,68,.5)}100%{background:transparent}}
+  @keyframes fD{0%{background:rgba(34,197,94,.5)}100%{background:transparent}}
+
+  /* 批次觸發卡 */
+  .batch{display:grid;grid-template-columns:auto 1fr auto;gap:8px;
+    padding:8px;border:1px solid var(--line);border-radius:6px;
+    margin-bottom:6px;background:var(--panel2);align-items:center}
+  .batch.done{opacity:.6}
+  .batch.armed{border-color:#fbbf24}
+  .batch.fired{border-color:var(--up);background:rgba(239,68,68,.08)}
+  .batch .id{font-weight:700;color:var(--accent);min-width:70px}
+  .batch .info{font-size:12px}
+  .batch .info small{color:var(--muted)}
+  .dist-bar{position:relative;height:6px;background:#1e2a44;border-radius:3px;margin-top:4px;overflow:hidden}
+  .dist-bar .now{position:absolute;height:100%;background:linear-gradient(90deg,var(--up),var(--accent));}
+
+  /* 風險閘門 */
+  .gates{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .gate{display:flex;align-items:center;gap:8px;padding:7px 10px;
+    background:var(--panel2);border:1px solid var(--line);border-radius:5px;font-size:12px}
+  .gate .led{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .gate.ok .led{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+  .gate.warn .led{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+  .gate.crit .led{background:var(--crit);box-shadow:0 0 6px var(--crit)}
+  .gate small{color:var(--muted);margin-left:auto}
+
+  /* 時間軸里程碑 */
+  .timeline{position:relative;padding:18px 0 6px;overflow-x:auto}
+  .timeline .track{position:relative;height:6px;background:#1e2a44;border-radius:3px;margin:18px 4px 28px}
+  .timeline .done-fill{position:absolute;left:0;height:100%;background:linear-gradient(90deg,#1d4ed8,#3b82f6);border-radius:3px}
+  .timeline .now-marker{position:absolute;width:3px;height:18px;background:var(--accent);
+    top:-6px;box-shadow:0 0 6px var(--accent)}
+  .timeline .ms{position:absolute;transform:translateX(-50%);text-align:center;font-size:10px;
+    color:var(--muted);top:-18px}
+  .timeline .ms .dot{width:8px;height:8px;border-radius:50%;background:#475569;margin:14px auto 2px}
+  .timeline .ms.passed .dot{background:#3b82f6}
+  .timeline .ms.now .dot{background:var(--accent);box-shadow:0 0 6px var(--accent);width:10px;height:10px}
+
+  /* 交易紀錄/歷史 */
+  .log-list{max-height:200px;overflow:auto;font-size:12px}
+  .log-list .row{display:flex;gap:8px;padding:5px 6px;border-bottom:1px solid var(--line)}
+  .log-list .row:hover{background:rgba(59,130,246,.05)}
+  .tag{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;
+    background:#334155;color:#cbd5e1}
+  .tag.buy{background:rgba(239,68,68,.2);color:#fca5a5}
+  .tag.sell{background:rgba(34,197,94,.2);color:#86efac}
+
+  footer{padding:8px 16px;color:var(--muted);font-size:11px;text-align:center;border-top:1px solid var(--line)}
+  a{color:var(--info);text-decoration:none}
+  a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="live-dot"></span> OCC <span class="v">作戰指揮中心 v1.0</span></h1>
+  <div class="meta">
+    <span>策略：<span id="strat" style="color:#cbd5e1">--</span></span>
+    <span>Session #<span id="sess">--</span></span>
+    <span>距完成期：<span id="dday" style="color:var(--accent)">--</span> 天</span>
+    <span>下次更新：<span id="cd">--</span>s</span>
+    <label class="btn">📂 載入 state.json<input type="file" id="file" accept="application/json"></label>
+    <button id="refresh">⟳ 即時重抓</button>
+    <a href="index.html" style="color:#94a3b8;font-size:12px">→ 戰情室</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- 左欄 -->
+  <div class="col">
+    <!-- 頂部 KPI -->
+    <div class="panel">
+      <h2><span class="bar"></span>戰情總覽 STATE OVERVIEW <span class="sub" id="last-up">--</span></h2>
+      <div class="kpis" id="kpi-strip"></div>
+    </div>
+
+    <!-- 累積進度 -->
+    <div class="panel">
+      <h2><span class="bar"></span>累積建倉進度 CUMULATIVE PROGRESS <span class="sub" id="prog-status"></span></h2>
+      <div id="prog-bar"></div>
+      <div class="timeline" id="timeline"></div>
+    </div>
+
+    <!-- 持股 -->
+    <div class="panel">
+      <h2><span class="bar"></span>持股即時連線 HOLDINGS (LIVE) <span class="sub" id="hold-sub">--</span></h2>
+      <div style="overflow:auto">
+        <table id="hold-tbl">
+          <thead><tr>
+            <th>標的</th><th>股數</th><th>均價</th><th>成本</th>
+            <th>即時</th><th>市值</th><th>未實現</th><th>%</th><th>建倉%</th>
+          </tr></thead>
+          <tbody></tbody>
+          <tfoot><tr id="hold-foot"></tr></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- 2330 批次觸發 -->
+    <div class="panel">
+      <h2><span class="bar"></span>2330 批次觸發 BATCH TRIGGERS <span class="sub" id="tsmc-now">--</span></h2>
+      <div id="batches"></div>
+    </div>
+  </div>
+
+  <!-- 右欄 -->
+  <div class="col">
+    <!-- 風險閘門 -->
+    <div class="panel">
+      <h2><span class="bar"></span>風險閘門 RISK GATES</h2>
+      <div class="gates" id="gates"></div>
+    </div>
+
+    <!-- 資金結構 -->
+    <div class="panel">
+      <h2><span class="bar"></span>資金結構 CASH STRUCTURE</h2>
+      <div id="cash-bd"></div>
+    </div>
+
+    <!-- 下三月計畫 -->
+    <div class="panel">
+      <h2><span class="bar"></span>下三月作戰計畫 NEXT 3 MONTHS</h2>
+      <div id="next-plan"></div>
+    </div>
+
+    <!-- Interlocks -->
+    <div class="panel">
+      <h2><span class="bar"></span>連動規則 INTERLOCKS</h2>
+      <div id="interlocks" style="font-size:12px"></div>
+    </div>
+
+    <!-- 交易紀錄 -->
+    <div class="panel">
+      <h2><span class="bar"></span>交易紀錄 TRANSACTIONS <span class="sub" id="tx-sub"></span></h2>
+      <div class="log-list" id="tx-list"></div>
+    </div>
+
+    <!-- 歷史 -->
+    <div class="panel">
+      <h2><span class="bar"></span>戰略演進 HISTORY</h2>
+      <div class="log-list" id="hist-list"></div>
+    </div>
+  </div>
+</div>
+
+<footer>OCC 模式 · 純前端 · 即時行情：Yahoo Finance（含 CORS proxy fallback）· 資料：本地 state.json</footer>
+
+<script>
+/* ============ 全域 ============ */
+let state = null;
+let livePrices = new Map();   // ticker → 即時價
+const lastShown = new Map();
+let timer=null,cdTimer=null,leftSec=30;
+const REFRESH_SEC = 30;
+
+/* ============ 工具 ============ */
+const $ = s => document.querySelector(s);
+const fmt = (n,d=2) => (n==null||isNaN(n))?"--":Number(n).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmtMoney = n => (n==null||isNaN(n))?"--":Math.round(n).toLocaleString();
+const fmtMan = n => (n==null||isNaN(n))?"--":(n/10000).toFixed(1)+"萬";
+const cls = v => v>0?"up-c":v<0?"dn-c":"muted";
+const sign = v => v>0?"+":"";
+
+/* ============ CORS proxy + Yahoo ============ */
+const PROXIES = [
+  u=>u,
+  u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
+  u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+];
+async function fetchJson(url){
+  let lastErr;
+  for(const wrap of PROXIES){
+    try{
+      const r = await fetch(wrap(url),{cache:"no-store"});
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      return await r.json();
+    }catch(e){ lastErr = e; }
+  }
+  throw lastErr;
+}
+function tickerToYahoo(t){
+  // 數字代號 → 加 .TW（台股）
+  if(/^\d+$/.test(t)) return t+".TW";
+  return t;
+}
+async function fetchPrice(ticker){
+  const sym = tickerToYahoo(ticker);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=1d&interval=5m`;
+  const j = await fetchJson(url);
+  const m = j?.chart?.result?.[0]?.meta;
+  if(!m) throw new Error("無資料");
+  const price = m.regularMarketPrice;
+  const prev  = m.chartPreviousClose ?? m.previousClose;
+  return {price, prev, change: price-prev, pct: prev?(price-prev)/prev*100:0};
+}
+
+/* ============ 載入 state ============ */
+async function loadState(){
+  try{
+    const r = await fetch("state.json",{cache:"no-store"});
+    if(!r.ok) throw 0;
+    state = await r.json();
+    render();
+  }catch(e){
+    document.querySelector(".wrap").innerHTML =
+      `<div class="panel" style="grid-column:1/-1">
+        <h2><span class="bar"></span>未載入 state.json</h2>
+        <p>請點上方「📂 載入 state.json」或將 JSON 拖入視窗。</p>
+      </div>`;
+  }
+}
+
+/* ============ 渲染 ============ */
+function render(){
+  if(!state) return;
+  // header
+  $("#strat").textContent = state.strategy_version || "--";
+  $("#sess").textContent  = state.session_count || "--";
+  $("#last-up").textContent = "最後更新：" + (state.last_updated || "--");
+  // 距完成期
+  if(state.build_target?.completion_target_date){
+    const d = (new Date(state.build_target.completion_target_date) - new Date())/(1000*86400);
+    $("#dday").textContent = Math.round(d);
+  }
+  renderKPIs();
+  renderProgress();
+  renderHoldings();   // 先用靜態
+  renderBatches();
+  renderGates();
+  renderCash();
+  renderNextPlan();
+  renderInterlocks();
+  renderTx();
+  renderHistory();
+  // 抓即時價
+  refreshLivePrices();
+}
+
+function renderKPIs(){
+  const c = state.cash || {};
+  const tg = state.build_target || {};
+  const sched = state.cumulative_progress_schedule || {};
+  // 找當前里程碑
+  const ms = sched.milestones || [];
+  const today = new Date().toISOString().slice(0,7); // 2026-05
+  const cur = ms.find(m=>m.month_end===today) || ms[0];
+  const expected = cur?.expected_deployed || 0;
+  const ratio = expected ? (c.deployed||0)/expected : 0;
+  let stat = "ok", note = "正常節奏";
+  if(ratio < 0.9){ stat="crit"; note="落後！需補課"; }
+  else if(ratio > 1.1){ stat="warn"; note="超前 — 暫停加碼"; }
+
+  const totalProgress = tg.total_deployment_target ? (c.deployed/tg.total_deployment_target*100) : 0;
+
+  $("#kpi-strip").innerHTML = `
+    <div class="kpi"><div class="lb">總預算</div><div class="vl">${fmtMan(c.total_budget)}</div><div class="sub">NTD</div></div>
+    <div class="kpi"><div class="lb">已部署</div><div class="vl">${fmtMan(c.deployed)}</div><div class="sub">${totalProgress.toFixed(1)}% of target</div></div>
+    <div class="kpi"><div class="lb">可動用</div><div class="vl">${fmtMan(c.available)}</div><div class="sub">含緩衝</div></div>
+    <div class="kpi"><div class="lb">實效可投</div><div class="vl">${fmtMan(c.effective_deployable)}</div><div class="sub">扣 ${fmtMan(c.total_cash_buffer)} 緩衝</div></div>
+    <div class="kpi ${stat}"><div class="lb">節奏判定</div><div class="vl">${(ratio*100).toFixed(0)}%</div><div class="sub">${note}</div></div>
+    <div class="kpi"><div class="lb">建倉目標</div><div class="vl">${fmtMan(tg.total_deployment_target)}</div><div class="sub">@ ${tg.completion_target_date||"--"}</div></div>`;
+}
+
+function renderProgress(){
+  const sched = state.cumulative_progress_schedule;
+  if(!sched) return;
+  const c = state.cash || {};
+  const tg = state.build_target || {};
+  const deployed = c.deployed || 0;
+  const target = tg.total_deployment_target || sched.target_amount;
+
+  // 主進度條
+  const pct = target ? Math.min(100, deployed/target*100) : 0;
+  // 找應達線
+  const today = new Date().toISOString().slice(0,7);
+  const cur = sched.milestones.find(m=>m.month_end===today);
+  const expectedPct = cur ? (cur.expected_deployed/target*100) : 0;
+  $("#prog-bar").innerHTML = `
+    <div class="pbar">
+      <div class="fill" style="width:${pct}%"></div>
+      <div class="target" style="left:${expectedPct}%" title="應達線 ${expectedPct.toFixed(1)}%"></div>
+      <div class="lbl">${fmtMan(deployed)} / ${fmtMan(target)} · ${pct.toFixed(1)}%（應達 ${expectedPct.toFixed(1)}%）</div>
+    </div>`;
+  $("#prog-status").textContent = `${sched.method || ''} · 月均 ${fmtMan(sched.monthly_avg_pace)}`;
+
+  // 時間軸里程碑
+  const ms = sched.milestones || [];
+  const total = ms.length-1;
+  const passedCount = ms.findIndex(m=>m.status!=="on_track" && m.month_end>today);
+  const passedIdx = passedCount<0 ? ms.length-1 : passedCount-1;
+  const fillPct = total ? (Math.max(0,passedIdx)/total*100) : 0;
+
+  $("#timeline").innerHTML = `
+    <div class="track">
+      <div class="done-fill" style="width:${fillPct}%"></div>
+      <div class="now-marker" style="left:${fillPct}%"></div>
+    </div>
+    ${ms.map((m,i)=>{
+      const left = total?(i/total*100):0;
+      const isNow = m.month_end===today;
+      const passed = m.month_end<=today;
+      return `<div class="ms ${passed?'passed':''} ${isNow?'now':''}" style="left:${left}%">
+        <div class="dot"></div>
+        <div>${m.month_end.slice(2)}</div>
+        <div style="color:#cbd5e1">${(m.expected_pct||0).toFixed(0)}%</div>
+      </div>`;
+    }).join('')}`;
+}
+
+function renderHoldings(){
+  const tb = $("#hold-tbl tbody");
+  const holds = state.holdings || [];
+  const oth = state.other_holdings || [];
+  const all = [...holds, ...oth];
+  const totalMV = all.reduce((s,h)=>s+(h.last_market_value||0),0);
+
+  tb.innerHTML = all.map(h=>{
+    const live = livePrices.get(h.ticker);
+    const px = live?.price ?? h.last_price;
+    const mv = px && h.shares ? px*h.shares : (h.last_market_value || 0);
+    const pnl = mv - (h.total_cost||0);
+    const pct = h.total_cost ? pnl/h.total_cost*100 : 0;
+    const wt  = totalMV ? mv/totalMV*100 : 0;
+    const live_cls = live ? (live.change>=0?"up-c":"dn-c") : "muted";
+    const liveTxt = live ? `${fmt(live.price)} <small style="color:${live.change>=0?'var(--up)':'var(--dn)'}">${sign(live.change)}${fmt(live.change)} (${sign(live.pct)}${fmt(live.pct)}%)</small>` : fmt(h.last_price);
+    return `<tr data-t="${h.ticker}">
+      <td><b>${h.ticker}</b> <span style="color:#94a3b8">${h.name||''}</span></td>
+      <td>${h.shares??'--'}</td>
+      <td>${fmt(h.avg_cost)}</td>
+      <td>${fmtMoney(h.total_cost)}</td>
+      <td class="live ${live_cls}">${liveTxt}</td>
+      <td>${fmtMoney(mv)}</td>
+      <td class="${cls(pnl)}">${sign(pnl)}${fmtMoney(pnl)} (${sign(pct)}${fmt(pct)}%)</td>
+      <td>${fmt(wt,1)}%</td>
+      <td>${h.build_progress_pct!=null?fmt(h.build_progress_pct,1)+'%':'--'}</td>
+    </tr>`;
+  }).join('');
+
+  const totalCost = all.reduce((s,h)=>s+(h.total_cost||0),0);
+  const totalPnl  = totalMV - totalCost;
+  $("#hold-foot").innerHTML = `
+    <td colspan="3"><b>合計</b></td>
+    <td>${fmtMoney(totalCost)}</td>
+    <td>--</td>
+    <td><b>${fmtMoney(totalMV)}</b></td>
+    <td class="${cls(totalPnl)}"><b>${sign(totalPnl)}${fmtMoney(totalPnl)}</b></td>
+    <td>100%</td><td></td>`;
+  $("#hold-sub").textContent = `${all.length} 檔 · 總市值 ${fmtMan(totalMV)}`;
+}
+
+function renderBatches(){
+  const batches = state.batch_2330_progress || [];
+  const live = livePrices.get("2330");
+  const cur = live?.price;
+  $("#tsmc-now").textContent = `現價 ${cur?fmt(cur):'--'} TWD`;
+
+  $("#batches").innerHTML = batches.map(b=>{
+    const exec = b.executed===true || b.executed==="partial";
+    const isPartial = b.executed==="partial";
+    const triggerPx = (b.trigger.match(/[\d,]+/)||[null])[0]?.replace(/,/g,'');
+    let distPct = b.distance_pct;
+    if(cur && triggerPx){
+      distPct = (cur - parseFloat(triggerPx))/parseFloat(triggerPx)*100;
+    }
+    const armed = !exec && cur && triggerPx && Math.abs(distPct) < 2;
+    const fired = !exec && cur && triggerPx && cur <= parseFloat(triggerPx);
+    const stateCls = exec?"done":fired?"fired":armed?"armed":"";
+    const status = exec ? (isPartial?`部分執行 ${fmtMoney(b.executed_amount)}`:'已執行') :
+                   fired ? "🔥 已觸發！" : armed ? "⚠ 接近" : "待命";
+    return `<div class="batch ${stateCls}">
+      <div class="id">Batch ${b.batch}</div>
+      <div class="info">
+        <div>${b.trigger} <small>· 目標 ${fmtMoney(b.amount_target)}</small></div>
+        <div>${distPct!=null?`距離 ${sign(distPct)}${fmt(distPct,1)}%`:''} ${isPartial?`· 已投 ${fmtMoney(b.executed_amount)} / 剩 ${fmtMoney(b.remaining)}`:''}</div>
+        ${distPct!=null && !exec ? `<div class="dist-bar"><div class="now" style="width:${Math.max(0,Math.min(100,100-Math.abs(distPct)*4))}%"></div></div>` : ''}
+      </div>
+      <div style="text-align:right;font-size:11px">${status}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderGates(){
+  const c = state.cash || {};
+  const tg = state.build_target || {};
+  const lim = state.risk_limits || {};
+  const ctrl = state["2330_total_target_control"] || {};
+  const log = state.monthly_execution_log || [];
+  const thisMonth = log[log.length-1] || {};
+
+  const gates = [
+    {
+      lb: "TSMC 曝險 (上限 45%)",
+      val: ((ctrl.current_invested||0)/c.total_budget*100),
+      lim: 45, fmt:v=>fmt(v,1)+"%"
+    },
+    {
+      lb: "建倉達 80% 覆核 (244 萬)",
+      val: c.deployed||0, lim:2440000,
+      fmt:fmtMan, warnAt:0.95
+    },
+    {
+      lb: "單月部署 (上限 36 萬)",
+      val: thisMonth.actual_executed||0, lim:lim.max_single_month_total_deployment||360000,
+      fmt:fmtMoney
+    },
+    {
+      lb: "執行緩衝 (≥ 15 萬)",
+      val: c.execution_buffer||0, lim:150000,
+      fmt:fmtMoney, reverse:true
+    },
+    {
+      lb: "2330 累積投入 (上限 102 萬)",
+      val: ctrl.current_invested||0, lim:ctrl.target_amount||1020000,
+      fmt:fmtMoney
+    },
+    {
+      lb: "總部署上限 (305 萬)",
+      val: c.deployed||0, lim:tg.total_deployment_target||3050000,
+      fmt:fmtMan
+    }
+  ];
+
+  $("#gates").innerHTML = gates.map(g=>{
+    const r = g.val/g.lim;
+    let s = "ok";
+    if(g.reverse){
+      if(g.val < g.lim) s = "crit";
+      else if(g.val < g.lim*1.2) s="warn";
+    } else {
+      if(r >= 1) s="crit";
+      else if(r >= (g.warnAt||0.85)) s="warn";
+    }
+    return `<div class="gate ${s}">
+      <span class="led"></span>
+      <span>${g.lb}</span>
+      <small>${g.fmt(g.val)} / ${g.fmt(g.lim)} (${(r*100).toFixed(0)}%)</small>
+    </div>`;
+  }).join('');
+}
+
+function renderCash(){
+  const c = state.cash || {};
+  const fc = state.funding_cost || {};
+  const idle = (c.available||0) - (c.total_cash_buffer||0);
+  const idleAnnual = idle * (fc.annual_rate||0);
+
+  $("#cash-bd").innerHTML = `
+    <table>
+      <tr><td>總預算</td><td><b>${fmtMan(c.total_budget)}</b></td></tr>
+      <tr><td>已部署</td><td>${fmtMan(c.deployed)}</td></tr>
+      <tr><td>可動用</td><td>${fmtMan(c.available)}</td></tr>
+      <tr><td>　- 永久緩衝</td><td>${fmtMan(c.permanent_reserve)}</td></tr>
+      <tr><td>　- 執行緩衝</td><td>${fmtMan(c.execution_buffer)}</td></tr>
+      <tr><td>實效可投</td><td><b style="color:var(--accent)">${fmtMan(c.effective_deployable)}</b></td></tr>
+      <tr><td colspan="2" style="border-top:2px solid var(--line);padding-top:6px"></td></tr>
+      <tr><td>資金成本年率</td><td>${fmt((fc.annual_rate||0)*100,1)}%</td></tr>
+      <tr><td>閒置部位</td><td class="${idle>500000?'up-c':'muted'}">${fmtMan(idle)}</td></tr>
+      <tr><td>年度資金成本</td><td class="dn-c">-${fmtMoney(idleAnnual)}</td></tr>
+    </table>`;
+}
+
+function renderNextPlan(){
+  const np = state.next_3_months_plan || {};
+  $("#next-plan").innerHTML = Object.entries(np).map(([month,plan])=>{
+    return `<div style="margin-bottom:10px">
+      <div style="color:var(--accent);font-weight:600;margin-bottom:4px">${month} · 目標 ${fmtMan(plan.target_amount)}</div>
+      ${plan.split?`<div style="font-size:11px;color:#94a3b8;margin-bottom:4px">配置：${Object.entries(plan.split).map(([k,v])=>`${k} ${fmtMan(v)}`).join(' · ')}</div>`:''}
+      ${plan.schedule?`<table style="font-size:11px"><tbody>${plan.schedule.map(s=>`
+        <tr><td>${s.date}</td><td>${s.ticker}</td><td>${s.shares??'--'} 股</td><td>${fmtMoney(s.amount)}</td></tr>
+      `).join('')}</tbody></table>`:''}
+      ${plan.review_required_before_start?`<div style="font-size:11px;color:var(--warn);margin-top:4px">⚠ ${plan.review_required_before_start}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function renderInterlocks(){
+  const il = state.monthly_plan?.interlock_rules || [];
+  $("#interlocks").innerHTML = il.map(r=>`
+    <div style="padding:6px 8px;border-bottom:1px solid var(--line)">
+      <div><b style="color:var(--accent)">${r.id}</b> · ${r.trigger}</div>
+      <div style="color:#cbd5e1;font-size:11px;margin-top:2px">→ ${r.action}</div>
+      <div style="color:#94a3b8;font-size:11px">${r.constraint||''}</div>
+    </div>`).join('');
+}
+
+function renderTx(){
+  const txs = (state.transactions || []).slice().reverse();
+  $("#tx-sub").textContent = `${txs.length} 筆`;
+  $("#tx-list").innerHTML = txs.map(t=>`
+    <div class="row">
+      <span style="color:#94a3b8;width:90px">${t.date}</span>
+      <span class="tag ${t.action}">${t.action}</span>
+      <span style="width:60px"><b>${t.ticker}</b></span>
+      <span style="width:80px;text-align:right">${t.shares} 股</span>
+      <span style="width:100px;text-align:right">@ ${fmt(t.price)}</span>
+      <span style="text-align:right;color:var(--accent)">${fmtMoney(t.amount)}</span>
+    </div>`).join('');
+}
+
+function renderHistory(){
+  const h = (state.history_snapshots || []).slice().reverse();
+  $("#hist-list").innerHTML = h.map(s=>`
+    <div class="row">
+      <span style="color:#94a3b8;width:140px">${s.date}</span>
+      <span class="tag">S${s.session}</span>
+      <span style="width:80px;text-align:right">${fmtMan(s.deployed)}</span>
+      <span style="color:#cbd5e1">${s.note||''}</span>
+    </div>`).join('');
+}
+
+/* ============ 即時行情 ============ */
+async function refreshLivePrices(){
+  if(!state) return;
+  const tickers = (state.holdings||[]).map(h=>h.ticker).filter(t=>/^\d/.test(t));
+  const results = await Promise.allSettled(tickers.map(t=>fetchPrice(t)));
+  results.forEach((r,i)=>{
+    if(r.status==="fulfilled") livePrices.set(tickers[i], r.value);
+  });
+  // 重繪受影響區塊
+  renderHoldings();
+  renderBatches();
+}
+
+/* ============ 倒數刷新 ============ */
+function startLoop(){
+  if(timer) clearInterval(timer);
+  if(cdTimer) clearInterval(cdTimer);
+  leftSec = REFRESH_SEC;
+  timer = setInterval(()=>{ refreshLivePrices(); leftSec = REFRESH_SEC; }, REFRESH_SEC*1000);
+  cdTimer = setInterval(()=>{ leftSec=Math.max(0,leftSec-1); $("#cd").textContent=leftSec; },1000);
+}
+
+/* ============ 事件 ============ */
+$("#refresh").addEventListener("click",()=>{ refreshLivePrices(); leftSec=REFRESH_SEC; });
+$("#file").addEventListener("change", async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  state = JSON.parse(await f.text());
+  render();
+});
+window.addEventListener("dragover", e=>e.preventDefault());
+window.addEventListener("drop", async e=>{
+  e.preventDefault();
+  const f = e.dataTransfer.files[0]; if(!f) return;
+  state = JSON.parse(await f.text());
+  render();
+});
+
+/* ============ 啟動 ============ */
+loadState().then(startLoop);
+</script>
+</body>
+</html>

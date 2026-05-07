@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<title>股市戰情室 · War Room</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root{
+    --bg:#0a0e1a; --panel:#111827; --panel2:#0f172a;
+    --line:#1f2937; --text:#e5e7eb; --muted:#9ca3af;
+    --up:#ef4444; --down:#22c55e;     /* 台股慣例：紅漲綠跌 */
+    --up-bg:rgba(239,68,68,.12); --down-bg:rgba(34,197,94,.12);
+    --accent:#f59e0b; --info:#38bdf8;
+    --grid:#1e293b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei",
+      "Segoe UI",Roboto,sans-serif;}
+  header{
+    display:flex;align-items:center;gap:16px;padding:12px 18px;
+    background:linear-gradient(90deg,#0b1220, #111827);
+    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5;
+  }
+  header h1{font-size:18px;margin:0;letter-spacing:2px;color:#fff}
+  header h1 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;
+    background:var(--up);margin-right:8px;box-shadow:0 0 10px var(--up);
+    animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+  header .meta{margin-left:auto;display:flex;gap:14px;align-items:center;color:var(--muted);font-size:13px}
+  header button, header label.btn{
+    background:#1f2937;color:#e5e7eb;border:1px solid #374151;
+    padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px;
+  }
+  header button:hover, header label.btn:hover{background:#374151}
+  header input[type=file]{display:none}
+
+  .grid{display:grid;gap:14px;padding:14px;
+    grid-template-columns: 1.4fr 1fr;}
+  @media (max-width: 1100px){ .grid{grid-template-columns:1fr} }
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:14px;}
+  .panel h2{margin:0 0 10px;font-size:14px;color:var(--muted);
+    letter-spacing:1.5px;display:flex;align-items:center;gap:8px}
+  .panel h2 .bar{width:3px;height:14px;background:var(--accent);display:inline-block}
+
+  .indices{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;}
+  .ix{background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    padding:10px 12px;position:relative;overflow:hidden;}
+  .ix .nm{font-size:13px;color:var(--muted)}
+  .ix .pr{font-size:22px;font-weight:700;margin-top:4px;letter-spacing:.5px}
+  .ix .ch{font-size:13px;margin-top:2px}
+  .ix.up{border-color:rgba(239,68,68,.4);background:linear-gradient(180deg,var(--up-bg),var(--panel2))}
+  .ix.dn{border-color:rgba(34,197,94,.4);background:linear-gradient(180deg,var(--down-bg),var(--panel2))}
+  .up-c{color:var(--up)} .dn-c{color:var(--down)}
+  .ix svg.spark{position:absolute;right:6px;bottom:6px;opacity:.6}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--muted);font-weight:500;background:var(--panel2);position:sticky;top:0}
+  tr.alert-up td{background:rgba(239,68,68,.08)}
+  tr.alert-dn td{background:rgba(34,197,94,.08)}
+  td.flash-up{animation:flashU 1s}
+  td.flash-dn{animation:flashD 1s}
+  @keyframes flashU{0%{background:rgba(239,68,68,.5)}100%{background:transparent}}
+  @keyframes flashD{0%{background:rgba(34,197,94,.5)}100%{background:transparent}}
+
+  .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+  .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px}
+  .kpi .lb{font-size:12px;color:var(--muted)}
+  .kpi .vl{font-size:18px;font-weight:700;margin-top:4px}
+
+  #log{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;
+    background:#020617;border:1px solid var(--line);border-radius:6px;
+    padding:8px;max-height:140px;overflow:auto;color:#94a3b8}
+  #log .ok{color:#22c55e} #log .err{color:#ef4444} #log .warn{color:#f59e0b}
+
+  .src-tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;
+    background:#374151;color:#d1d5db;margin-left:6px}
+  footer{padding:10px 18px;color:var(--muted);font-size:12px;text-align:center;
+    border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot"></span>股市戰情室 <span style="color:var(--muted);font-size:13px;letter-spacing:0">War Room</span></h1>
+  <div class="meta">
+    <span id="title-tag"></span>
+    <span>下次更新：<span id="countdown">--</span>s</span>
+    <span>更新時間：<span id="updated">--</span></span>
+    <label class="btn">📂 載入 JSON<input type="file" id="file" accept="application/json"></label>
+    <button id="refresh">⟳ 立即刷新</button>
+    <button id="pause">⏸ 暫停</button>
+    <a href="occ.html" style="color:#fbbf24;font-size:13px;margin-left:6px;text-decoration:none">→ OCC 指揮中心</a>
+  </div>
+</header>
+
+<div class="grid">
+  <!-- 左欄：指數 + 自選 -->
+  <div>
+    <div class="panel" style="margin-bottom:14px">
+      <h2><span class="bar"></span>全球指數 INDICES</h2>
+      <div class="indices" id="ix-grid"></div>
+    </div>
+
+    <div class="panel">
+      <h2><span class="bar"></span>自選股 WATCHLIST</h2>
+      <div class="summary" id="summary"></div>
+      <div style="max-height:480px;overflow:auto">
+        <table id="wl-tbl">
+          <thead><tr>
+            <th>名稱 / 代號</th><th>最新</th><th>漲跌</th><th>漲跌幅</th>
+            <th>開盤</th><th>最高</th><th>最低</th><th>成交量</th><th>走勢</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右欄：匯率 + Log -->
+  <div>
+    <div class="panel" style="margin-bottom:14px">
+      <h2><span class="bar"></span>匯率 / 美元指數 FX</h2>
+      <div class="indices" id="fx-grid"></div>
+    </div>
+
+    <div class="panel">
+      <h2><span class="bar"></span>系統訊息 LOG</h2>
+      <div id="log"></div>
+      <div style="margin-top:10px;font-size:12px;color:var(--muted)">
+        資料來源：Yahoo Finance（query1.finance.yahoo.com）。
+        若瀏覽器封鎖跨來源，會自動切換 Stooq 備援。
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  純前端、單檔執行 · 拖入 watchlist.json 即可切換清單 · 紅漲綠跌（台股慣例）
+</footer>
+
+<script>
+/* ============ 狀態 ============ */
+let cfg = null;
+let timer = null, countdownTimer = null, leftSec = 0;
+let paused = false;
+const lastPrice = new Map();   // 記錄上次價格用於 flash
+const sparkCache = new Map();  // symbol -> [closes]
+
+/* ============ 工具 ============ */
+const $ = (s, root=document) => root.querySelector(s);
+const fmt = (n, d=2) => (n==null||isNaN(n)) ? "--" : Number(n).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmtVol = n => {
+  if(n==null||isNaN(n)) return "--";
+  if(n>=1e8) return (n/1e8).toFixed(2)+"億";
+  if(n>=1e4) return (n/1e4).toFixed(1)+"萬";
+  return n.toLocaleString();
+};
+function log(msg, cls=""){
+  const el = $("#log");
+  const t = new Date().toLocaleTimeString("zh-TW",{hour12:false});
+  el.innerHTML = `<div class="${cls}">[${t}] ${msg}</div>` + el.innerHTML;
+  // 限制行數
+  const max = 80;
+  const lines = el.children;
+  while(lines.length>max) el.removeChild(lines[lines.length-1]);
+}
+
+/* ============ 取得行情 ============ */
+// CORS proxy 鏈：直連失敗時依序嘗試
+const PROXIES = [
+  u => u,                                               // 直連
+  u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+  u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+];
+async function fetchWithProxy(url){
+  let lastErr;
+  for(const wrap of PROXIES){
+    try{
+      const r = await fetch(wrap(url), {cache:"no-store"});
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      return await r.json();
+    }catch(e){ lastErr = e; }
+  }
+  throw lastErr || new Error("所有來源失敗");
+}
+
+// 主：Yahoo Finance chart API（多數情況下支援 CORS）
+async function fetchYahoo(symbol, range="1d", interval="5m"){
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
+  const j = await fetchWithProxy(url);
+  const res = j?.chart?.result?.[0];
+  if(!res) throw new Error("Yahoo 無資料");
+  const meta = res.meta || {};
+  const closes = (res.indicators?.quote?.[0]?.close || []).filter(v=>v!=null);
+  const price = meta.regularMarketPrice ?? closes[closes.length-1];
+  const prev  = meta.chartPreviousClose ?? meta.previousClose;
+  const change = price!=null && prev!=null ? price - prev : null;
+  const pct = (change!=null && prev) ? change/prev*100 : null;
+  return {
+    symbol, price, prev, change, pct,
+    open: meta.regularMarketOpen,
+    high: meta.regularMarketDayHigh,
+    low:  meta.regularMarketDayLow,
+    volume: meta.regularMarketVolume,
+    currency: meta.currency,
+    closes,
+    source:"yahoo"
+  };
+}
+
+// 備援：Stooq（CSV，CORS 友善）。代號需要轉換。
+function toStooq(sym){
+  // 台股 2330.TW -> 2330.tw、美股 AAPL -> aapl.us、指數 ^GSPC -> ^spx (Stooq 不完全支援)
+  if(sym.endsWith(".TW")) return sym.toLowerCase();
+  if(sym.startsWith("^")){
+    const m = {"^TWII":"^twse","^DJI":"^dji","^IXIC":"^ndq","^GSPC":"^spx",
+               "^SOX":"^sox","^N225":"^nkx","^HSI":"^hsi"};
+    return m[sym] || null;
+  }
+  if(/^[A-Za-z.\-]+$/.test(sym)) return sym.toLowerCase()+".us";
+  return null;
+}
+async function fetchStooq(symbol){
+  const s = toStooq(symbol);
+  if(!s) throw new Error("Stooq 不支援 "+symbol);
+  const url = `https://stooq.com/q/l/?s=${encodeURIComponent(s)}&f=sd2t2ohlcv&h&e=csv`;
+  const r = await fetch(url, {cache:"no-store"});
+  if(!r.ok) throw new Error("Stooq HTTP "+r.status);
+  const txt = await r.text();
+  const lines = txt.trim().split("\n");
+  if(lines.length<2) throw new Error("Stooq 空資料");
+  const cols = lines[1].split(",");
+  const [_,d,t,o,h,l,c,v] = cols;
+  if(c==="N/D") throw new Error("Stooq N/D");
+  const price = parseFloat(c), open=parseFloat(o), high=parseFloat(h), low=parseFloat(l);
+  return {
+    symbol, price, prev: open, change: price-open,
+    pct: open ? (price-open)/open*100 : null,
+    open, high, low, volume: parseInt(v)||null,
+    closes: [open,high,low,price], source:"stooq"
+  };
+}
+
+async function fetchQuote(symbol){
+  try { return await fetchYahoo(symbol); }
+  catch(e1){
+    try { const q = await fetchStooq(symbol); return q; }
+    catch(e2){ throw new Error(`${symbol}: ${e1.message} / ${e2.message}`); }
+  }
+}
+
+/* ============ 渲染 ============ */
+function sparkSVG(values, w=80, h=24){
+  if(!values || values.length<2) return "";
+  const min = Math.min(...values), max = Math.max(...values);
+  const span = max-min || 1;
+  const step = w / (values.length-1);
+  const pts = values.map((v,i)=>`${(i*step).toFixed(1)},${(h-(v-min)/span*h).toFixed(1)}`).join(" ");
+  const up = values[values.length-1] >= values[0];
+  const color = up ? "var(--up)" : "var(--down)";
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+    <polyline fill="none" stroke="${color}" stroke-width="1.5" points="${pts}"/>
+  </svg>`;
+}
+
+function renderIndexCard(q, name){
+  const up = (q.change ?? 0) >= 0;
+  const cls = up ? "up" : "dn";
+  const sign = up ? "▲" : "▼";
+  return `<div class="ix ${cls}">
+    <div class="nm">${name} <span class="src-tag">${q.source}</span></div>
+    <div class="pr ${up?'up-c':'dn-c'}">${fmt(q.price)}</div>
+    <div class="ch ${up?'up-c':'dn-c'}">${sign} ${fmt(q.change)} (${fmt(q.pct)}%)</div>
+    ${sparkSVG(q.closes)}
+  </div>`;
+}
+
+function flashCell(td, isUp){
+  td.classList.remove("flash-up","flash-dn");
+  void td.offsetWidth;
+  td.classList.add(isUp ? "flash-up" : "flash-dn");
+}
+
+function renderWatchlist(rows){
+  const tb = $("#wl-tbl tbody");
+  tb.innerHTML = "";
+  let upN=0, dnN=0, sumPct=0, cnt=0;
+  rows.forEach(({item,q,err})=>{
+    const tr = document.createElement("tr");
+    if(err){
+      tr.innerHTML = `<td>${item.name||item.symbol} <span class="src-tag">${item.symbol}</span></td>
+        <td colspan="8" style="color:var(--muted);text-align:left">⚠ ${err}</td>`;
+      tb.appendChild(tr); return;
+    }
+    const up = (q.change ?? 0) >= 0;
+    if(up) upN++; else dnN++;
+    if(q.pct!=null){ sumPct += q.pct; cnt++; }
+
+    if(item.alertUp!=null && q.pct >= item.alertUp) tr.classList.add("alert-up");
+    if(item.alertDown!=null && q.pct <= item.alertDown) tr.classList.add("alert-dn");
+
+    const sign = up ? "▲" : "▼";
+    tr.innerHTML = `
+      <td><b>${item.name||item.symbol}</b> <span class="src-tag">${item.symbol}</span></td>
+      <td class="px ${up?'up-c':'dn-c'}">${fmt(q.price)}</td>
+      <td class="${up?'up-c':'dn-c'}">${sign} ${fmt(q.change)}</td>
+      <td class="${up?'up-c':'dn-c'}">${fmt(q.pct)}%</td>
+      <td>${fmt(q.open)}</td>
+      <td>${fmt(q.high)}</td>
+      <td>${fmt(q.low)}</td>
+      <td>${fmtVol(q.volume)}</td>
+      <td>${sparkSVG(q.closes,90,22).replace('class="spark"','class="spark" style="position:relative"')}</td>`;
+    tb.appendChild(tr);
+
+    // flash
+    const last = lastPrice.get(item.symbol);
+    if(last!=null && q.price!=null && last!==q.price){
+      flashCell(tr.querySelector("td.px"), q.price>last);
+    }
+    lastPrice.set(item.symbol, q.price);
+  });
+
+  // 總覽
+  const avg = cnt? sumPct/cnt : 0;
+  $("#summary").innerHTML = `
+    <div class="kpi"><div class="lb">上漲檔數</div><div class="vl up-c">${upN}</div></div>
+    <div class="kpi"><div class="lb">下跌檔數</div><div class="vl dn-c">${dnN}</div></div>
+    <div class="kpi"><div class="lb">平均漲跌幅</div><div class="vl ${avg>=0?'up-c':'dn-c'}">${fmt(avg)}%</div></div>
+    <div class="kpi"><div class="lb">追蹤檔數</div><div class="vl">${rows.length}</div></div>`;
+}
+
+/* ============ 主流程 ============ */
+async function loadAll(){
+  if(!cfg) return;
+  log(`開始更新（指數 ${cfg.indices?.length||0} / 自選 ${cfg.watchlist?.length||0} / 匯率 ${cfg.fx?.length||0}）...`);
+  const tStart = performance.now();
+
+  // 指數
+  if(cfg.indices?.length){
+    const grid = $("#ix-grid"); grid.innerHTML = "";
+    const results = await Promise.allSettled(cfg.indices.map(i=>fetchQuote(i.symbol)));
+    results.forEach((r,i)=>{
+      const it = cfg.indices[i];
+      if(r.status==="fulfilled"){
+        grid.insertAdjacentHTML("beforeend", renderIndexCard(r.value, it.name||it.symbol));
+      } else {
+        grid.insertAdjacentHTML("beforeend",
+          `<div class="ix"><div class="nm">${it.name||it.symbol}</div>
+           <div class="pr" style="color:var(--muted);font-size:14px">⚠ 取得失敗</div>
+           <div class="ch" style="color:var(--muted)">${r.reason?.message||""}</div></div>`);
+        log(`指數失敗 ${it.symbol}：${r.reason?.message}`,"err");
+      }
+    });
+  }
+
+  // 匯率
+  if(cfg.fx?.length){
+    const grid = $("#fx-grid"); grid.innerHTML = "";
+    const results = await Promise.allSettled(cfg.fx.map(i=>fetchQuote(i.symbol)));
+    results.forEach((r,i)=>{
+      const it = cfg.fx[i];
+      if(r.status==="fulfilled"){
+        grid.insertAdjacentHTML("beforeend", renderIndexCard(r.value, it.name||it.symbol));
+      } else {
+        grid.insertAdjacentHTML("beforeend",
+          `<div class="ix"><div class="nm">${it.name||it.symbol}</div>
+           <div class="pr" style="color:var(--muted);font-size:14px">⚠</div></div>`);
+      }
+    });
+  }
+
+  // 自選
+  if(cfg.watchlist?.length){
+    const results = await Promise.allSettled(cfg.watchlist.map(i=>fetchQuote(i.symbol)));
+    const rows = results.map((r,i)=>{
+      const item = cfg.watchlist[i];
+      if(r.status==="fulfilled") return {item, q:r.value};
+      return {item, err:r.reason?.message||"失敗"};
+    });
+    renderWatchlist(rows);
+  }
+
+  $("#updated").textContent = new Date().toLocaleTimeString("zh-TW",{hour12:false});
+  log(`完成（耗時 ${((performance.now()-tStart)/1000).toFixed(2)}s）`,"ok");
+}
+
+function startLoop(){
+  stopLoop();
+  leftSec = cfg?.refreshSec || 30;
+  timer = setInterval(()=>{ if(!paused) loadAll().catch(e=>log(e.message,"err")); leftSec = cfg?.refreshSec || 30; }, (cfg?.refreshSec||30)*1000);
+  countdownTimer = setInterval(()=>{
+    if(paused){ $("#countdown").textContent = "暫停"; return; }
+    leftSec = Math.max(0, leftSec-1);
+    $("#countdown").textContent = leftSec;
+  },1000);
+}
+function stopLoop(){
+  if(timer) clearInterval(timer);
+  if(countdownTimer) clearInterval(countdownTimer);
+}
+
+/* ============ 載入 JSON ============ */
+async function applyConfig(c){
+  cfg = c;
+  $("#title-tag").textContent = c.title ? `「${c.title}」` : "";
+  document.title = `戰情室 · ${c.title||"Watch"}`;
+  log(`已載入清單：${c.title||"(no title)"}`,"ok");
+  await loadAll();
+  startLoop();
+}
+
+async function tryLoadDefault(){
+  try{
+    const r = await fetch("watchlist.json",{cache:"no-store"});
+    if(!r.ok) throw new Error("無 watchlist.json");
+    const j = await r.json();
+    await applyConfig(j);
+  }catch(e){
+    log("未找到 watchlist.json，使用內建預設清單","warn");
+    await applyConfig(DEFAULT_CFG);
+  }
+}
+
+const DEFAULT_CFG = {
+  title:"預設清單",
+  refreshSec:30,
+  indices:[
+    {symbol:"^TWII",name:"台灣加權"},
+    {symbol:"^DJI",name:"道瓊"},
+    {symbol:"^IXIC",name:"那斯達克"},
+    {symbol:"^SOX",name:"費半"}
+  ],
+  watchlist:[
+    {symbol:"2330.TW",name:"台積電"},
+    {symbol:"2317.TW",name:"鴻海"},
+    {symbol:"NVDA",name:"NVIDIA"},
+    {symbol:"AAPL",name:"Apple"}
+  ],
+  fx:[{symbol:"TWD=X",name:"USD/TWD"}]
+};
+
+/* ============ 事件 ============ */
+$("#refresh").addEventListener("click", ()=>{ loadAll().catch(e=>log(e.message,"err")); leftSec = cfg?.refreshSec||30; });
+$("#pause").addEventListener("click", e=>{
+  paused = !paused;
+  e.target.textContent = paused ? "▶ 繼續" : "⏸ 暫停";
+  log(paused?"已暫停自動更新":"恢復自動更新","warn");
+});
+$("#file").addEventListener("change", async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const j = JSON.parse(await f.text());
+    await applyConfig(j);
+  }catch(err){ log("JSON 解析失敗："+err.message,"err"); }
+});
+// 拖拉
+window.addEventListener("dragover", e=>e.preventDefault());
+window.addEventListener("drop", async e=>{
+  e.preventDefault();
+  const f = e.dataTransfer.files[0]; if(!f) return;
+  try{
+    const j = JSON.parse(await f.text());
+    await applyConfig(j);
+  }catch(err){ log("JSON 解析失敗："+err.message,"err"); }
+});
+
+/* ============ 啟動 ============ */
+tryLoadDefault();
+</script>
+</body>
+</html>

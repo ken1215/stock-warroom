@@ -1,0 +1,15 @@
+# 個人財務資料 — 絕不上傳
+state.json
+*-state.json
+0507state.json
+private/
+secrets/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
